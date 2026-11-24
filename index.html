@@ -138,6 +138,7 @@ nav.tabs button .dot{position:absolute;margin:-18px 0 0 22px;width:8px;height:8p
   </div>
   <div class="bar"><i id="npBar"></i></div>
   <div class="mode" id="modeSwitch" role="group" aria-label="Playback"><button data-mode="full">Full songs · YouTube / Apple Music</button><button data-mode="preview">Previews · plays on, works locked</button></div>
+  <div class="faint" style="font-size:11.5px;margin-top:6px">Locking your phone switches to previews so the music keeps going. <a id="ytQueue" hidden target="_blank" rel="noopener" style="color:var(--muted)"></a></div>
 </div></div>
 <nav class="tabs" aria-label="Sections"><div class="inner">
   <button data-tab="discover"><span>◉</span>Discover</button>
@@ -258,10 +259,14 @@ function promoterScores(sc) {
 /* ---------------- player: YouTube full songs, or 30s previews (keep playing when locked) ---------------- */
 const audio = $('#audio');
 let Q = [], qi = -1, ytPlayer = null, ytReady = false, pendingYT = null, tick = null;
+// iPhones pause YouTube when the screen locks. While the app is in the background ("away"),
+// the queue carries on as 30s previews, which keep playing locked; full songs resume when you come back.
+let away = false;
+const mode = () => away ? 'preview' : S.mode;
 function songFor(k, idx) {
   const songs = (A[k] && A[k].songs) || [];
   if (idx != null) return songs[idx];
-  return S.mode === 'full' ? (songs.find(s => s.youtube) || songs[0]) : (songs.find(s => s.preview) || songs[0]);
+  return mode() === 'full' ? (songs.find(s => s.youtube) || songs[0]) : (songs.find(s => s.preview) || songs[0]);
 }
 function setQueue(items, start = 0, label = '') {
   Q = items.filter(it => playable(it.k)); Q.label = label;
@@ -278,8 +283,9 @@ function playAt(i) {
   $('#npWhat').textContent = s.title + (g ? ` · ${fmtDay(g.start)}, ${V[g.venue].name}` : '');
   $('#npArt').src = s.artwork || ''; $('#npArt').style.visibility = s.artwork ? 'visible' : 'hidden';
   $('#npHeart').classList.toggle('on', liked(it.k)); $('#npHeart').textContent = liked(it.k) ? '♥' : '♡';
-  const useYT = s.youtube && (S.mode === 'full' || !s.preview);   // YouTube-only songs play either way
-  const amEmbed = !useYT && S.mode === 'full' && s.apple_url && s.apple_id
+  if (away && !s.preview) return next();   // locked: only previews can play, skip songs without one
+  const useYT = s.youtube && (mode() === 'full' || !s.preview);   // YouTube-only songs play either way (screen on)
+  const amEmbed = !useYT && mode() === 'full' && s.apple_url && s.apple_id
     ? s.apple_url.replace('https://music.apple.com', 'https://embed.music.apple.com') + '?i=' + s.apple_id + '&theme=dark' : null;
   $('#npSrc').innerHTML = esc((useYT ? 'Full song · YouTube' : amEmbed ? 'Apple Music player' : s.preview ? '30s preview · ' + (s.spotify_url ? 'Spotify' : 'Apple Music') : 'No playable clip')
     + ` · ${qi + 1}/${Q.length}${Q.label ? ' · ' + Q.label : ''}`) + (openLinks(s) ? ' · Save in: ' + openLinks(s) : '');
@@ -299,9 +305,42 @@ function playAt(i) {
     else return next();
   }
   mediaSession(a, s);
-  syncDock(); renderPlaying();
+  syncDock(); renderPlaying(); updateYTLink();
   tick = setInterval(progress, 500);
 }
+// "Open in YouTube": the rest of the queue as a temporary playlist in the YouTube app
+// (YouTube's app keeps playing with the screen locked for YouTube Premium members).
+function updateYTLink() {
+  const ids = [...new Set(Q.slice(Math.max(qi, 0)).map(it => (songFor(it.k, it.song) || {}).youtube || ((A[it.k].songs || []).find(s => s.youtube) || {}).youtube).filter(Boolean))].slice(0, 50);
+  const l = $('#ytQueue');
+  l.hidden = ids.length < 1;
+  l.href = 'https://www.youtube.com/watch_videos?video_ids=' + ids.join(',');
+  l.textContent = `Open the next ${ids.length} in YouTube ↗`;
+}
+// unlock the app's own audio player on the first tap, so it's allowed to take over when the phone locks
+let primed = false;
+document.addEventListener('click', () => {
+  if (primed) return; primed = true;
+  if (!audio.src) {
+    const silent = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+    audio.src = silent;
+    audio.play().then(() => { if (audio.src === silent) audio.pause(); }).catch(() => {});
+  }
+}, true);
+document.addEventListener('visibilitychange', () => {
+  const it = Q[qi];
+  if (document.hidden) {
+    const onScreenOnly = !$('#yt').hidden || !$('#am').hidden;   // YouTube / Apple player: stop when locked
+    if (it && onScreenOnly && (isPlaying() || !$('#am').hidden)) {
+      away = true;
+      if (ytReady) ytPlayer.pauseVideo();
+      playAt(qi);   // same act, as its preview; the queue carries on in previews
+    } else if (it) away = true;
+  } else if (away) {
+    away = false;
+    if (S.mode === 'full' && !audio.paused) toast('Full songs again from the next track');
+  }
+});
 function next() { if (qi + 1 < Q.length) playAt(qi + 1); else { pause(); toast('End of the queue'); } }
 function prev() { if (qi > 0) playAt(qi - 1); }
 function isPlaying() { if (!$('#am').hidden) return false; return ($('#yt').hidden ? !audio.paused : ytReady && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1); }
@@ -317,7 +356,7 @@ function progress() {
   else if (ytReady && ytPlayer.getDuration) f = ytPlayer.getCurrentTime() / (ytPlayer.getDuration() || 1);
   $('#npBar').style.width = (f * 100).toFixed(1) + '%'; syncDock();
 }
-audio.addEventListener('ended', next);
+audio.addEventListener('ended', () => { if (!audio.src.startsWith('data:') && Q[qi]) next(); });
 audio.addEventListener('play', syncDock); audio.addEventListener('pause', syncDock);
 // The YouTube player is created as soon as the app opens, so a tap on ▶ can start a video straight away:
 // iPhones only allow sound when playback starts inside the tap itself.
