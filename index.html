@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141019">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Small Rooms">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Small Rooms</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column, phone-first. Screens swap above a docked player and a bottom tab bar.
+   Palette: London after dark — inky plum ground, sodium-lamp amber for venues/gigs, cool blue for "you". */
+:root{
+  --ink:#141019; --ink-2:#1c1723; --ink-3:#282131; --line:#372e41;
+  --text:#f1eaf4; --muted:#aa9eb5; --faint:#6f6479;
+  --lamp:#ffb547; --lamp-dim:#7d5620; --you:#7cc7ff; --you-dim:#29475f; --live:#ff6b5a; --new:#9be38a;
+  --display:"Bricolage Grotesque","Avenir Next",system-ui,sans-serif;
+  --body:"Inter",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --tabh:58px; color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font:15px/1.45 var(--body)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--you);outline-offset:2px}
+#app{max-width:640px;margin:0 auto;min-height:100%;padding:0 max(16px,env(safe-area-inset-left)) calc(var(--tabh) + var(--dockh,0px) + 24px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-right))}
+header.top{position:sticky;top:0;z-index:5;background:var(--ink);padding:calc(10px + env(safe-area-inset-top)) 0 10px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--ink-3)}
+header.top h1{font:700 21px/1 var(--display);margin:0;letter-spacing:-.01em}
+header.top .back{font-size:22px;color:var(--muted);padding-right:4px}
+header.top .sub{margin-left:auto;color:var(--muted);font-size:12.5px;text-align:right}
+h2{font:700 18px/1.2 var(--display);margin:22px 0 8px;text-wrap:balance}
+h2 small{display:block;font:400 12.5px var(--body);color:var(--muted);margin-top:3px}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--muted);background:var(--ink-2)}
+.pill.on{border-color:var(--lamp);color:var(--text);background:#2b2115}
+.pill.you{border-color:var(--you-dim);color:var(--you)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.scroller{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:2px 16px}
+.scroller::-webkit-scrollbar{display:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:11px 16px;font-weight:600;font-size:14.5px}
+.btn.primary{background:var(--lamp);color:#1b1206}
+.btn.ghost{border:1px solid var(--line);color:var(--text)}
+.btn.you{background:var(--you);color:#071521}
+.card{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:14px;padding:14px}
+.callout{border-radius:14px;padding:14px;background:linear-gradient(180deg,#221a14,#1c1723);border:1px solid var(--lamp-dim)}
+.callout.blue{background:linear-gradient(180deg,#142130,#1c1723);border-color:var(--you-dim)}
+
+/* gig cards */
+.gig{padding:12px 0 14px;border-bottom:1px solid var(--ink-3)}
+.gig .meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);align-items:center}
+.gig .meta .v{color:var(--lamp);font-weight:600}
+.gig h3{font:600 15.5px/1.3 var(--body);margin:4px 0 8px;text-wrap:balance}
+.badge{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;border-radius:5px;padding:2px 6px}
+.badge.new{background:#1d3318;color:var(--new)}
+.badge.you{background:#16293a;color:var(--you)}
+.badge.going{background:#3a2616;color:var(--lamp)}
+ol.acts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+ol.acts li{display:grid;grid-template-columns:40px minmax(0,1fr) auto auto;gap:8px;align-items:center;min-height:40px;padding:0 6px;border-radius:8px}
+ol.acts li .t{font:12px var(--mono);color:var(--faint)}
+ol.acts li .n{min-width:0}
+ol.acts li .n b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ol.acts li .n i{display:block;font-style:normal;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ol.acts li.playing{background:var(--ink-3)}
+ol.acts li.playing .t{color:var(--live)}
+ol.acts li.nomusic b{color:var(--faint)}
+ol.acts li.rec b{color:var(--you)}
+.heart{width:36px;height:36px;display:grid;place-items:center;font-size:18px;color:var(--faint)}
+.heart.on{color:var(--live)}
+.play{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);font-size:12px}
+.gig .foot{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.gig .foot .btn{padding:8px 12px;font-size:13px;border-radius:10px}
+.going-on{background:var(--lamp);color:#1b1206;border-color:var(--lamp)!important}
+
+/* lists */
+.list{display:flex;flex-direction:column}
+.item{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ink-3)}
+.item img,.item .ph{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--ink-3);display:grid;place-items:center;color:var(--faint);font:600 16px var(--display)}
+.item .ttl{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.venuepick{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.venuepick button{display:flex;justify-content:space-between;align-items:center;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--ink-2)}
+.venuepick button small{color:var(--muted)}
+.progress{height:6px;background:var(--ink-3);border-radius:3px;overflow:hidden;margin-top:8px}
+.progress i{display:block;height:100%;background:var(--you)}
+
+/* player dock */
+#dock{position:fixed;left:0;right:0;bottom:calc(var(--tabh) + env(safe-area-inset-bottom));z-index:20;background:rgba(28,23,35,.98);border-top:1px solid var(--line);backdrop-filter:blur(10px)}
+#dock .inner{max-width:640px;margin:0 auto;padding:8px max(12px,env(safe-area-inset-left)) 8px max(12px,env(safe-area-inset-right))}
+#yt{width:100%;aspect-ratio:16/9;min-height:200px;max-height:34vh;border-radius:10px;overflow:hidden;background:#000;margin-bottom:8px}
+#yt iframe{width:100%;height:100%;border:0}
+.np{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center}
+.np img{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--ink-3)}
+.np .who{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np .what{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np .ctl{display:flex;align-items:center;gap:2px}
+.np .ctl button{width:38px;height:38px;display:grid;place-items:center;font-size:16px;border-radius:50%}
+.np .ctl .pp{background:var(--text);color:var(--ink);font-size:14px}
+.np .src{font-size:10.5px;color:var(--faint);margin-top:2px}
+#am iframe{width:100%;height:175px;border:0;border-radius:10px;overflow:hidden;background:transparent}
+#am .amhint{font-size:11.5px;color:var(--faint);margin:4px 2px 8px}
+.mode{display:flex;gap:6px;margin-top:8px}
+.mode button{flex:1;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:12px;color:var(--muted)}
+.mode button[aria-pressed="true"]{border-color:var(--lamp);color:var(--text);background:#2b2115}
+.bar{height:3px;background:var(--ink-3);border-radius:2px;margin-top:7px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--live)}
+
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--ink);border-top:1px solid var(--ink-3);padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs .inner{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);height:var(--tabh)}
+nav.tabs button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;color:var(--faint)}
+nav.tabs button span{font-size:19px;line-height:1}
+nav.tabs button[aria-current="page"]{color:var(--lamp)}
+nav.tabs button .dot{position:absolute;margin:-18px 0 0 22px;width:8px;height:8px;border-radius:50%;background:var(--new)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabh) + var(--dockh,0px) + 16px + env(safe-area-inset-bottom));background:var(--text);color:var(--ink);padding:9px 14px;border-radius:10px;font-size:13.5px;z-index:30;max-width:90vw}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="dock" hidden><div class="inner">
+  <div id="yt" hidden><div id="ytplayer"></div></div>
+  <div id="am" hidden><iframe id="amframe" title="Apple Music player" allow="autoplay *; encrypted-media *; clipboard-write" sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"></iframe>
+    <div class="amhint">Tap ▶ in Apple’s player. Signed in to Apple Music in this browser = full song, otherwise a preview. ⏭ when you’re ready.</div></div>
+  <div class="np">
+    <img id="npArt" alt="">
+    <div style="min-width:0"><div class="who" id="npWho"></div><div class="what" id="npWhat"></div><div class="src" id="npSrc"></div></div>
+    <div class="ctl">
+      <button id="npHeart" class="heart" aria-label="Like this act">♡</button>
+      <button id="npPrev" aria-label="Previous">⏮</button>
+      <button id="npPlay" class="pp" aria-label="Play or pause">▶</button>
+      <button id="npNext" aria-label="Next">⏭</button>
+    </div>
+  </div>
+  <div class="bar"><i id="npBar"></i></div>
+  <div class="mode" id="modeSwitch" role="group" aria-label="Playback"><button data-mode="full">Full songs · YouTube / Apple Music</button><button data-mode="preview">Previews · plays on, works locked</button></div>
+</div></div>
+<nav class="tabs" aria-label="Sections"><div class="inner">
+  <button data-tab="discover"><span>◉</span>Discover</button>
+  <button data-tab="browse"><span>▦</span>Browse</button>
+  <button data-tab="liked"><span>♥</span>Liked</button>
+  <button data-tab="gigs"><span>★</span>My gigs</button>
+</div></nav>
+<audio id="audio" preload="none" playsinline></audio>
+
+<script src="data.js"></script>
+<script>
+(() => {
+const SR = window.SR;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const V = Object.fromEntries(SR.venues.map(v => [v.key, v]));
+const A = SR.acts;
+const now = new Date();
+const dayKey = iso => new Date(iso).toLocaleDateString('en-CA', {timeZone: 'Europe/London'});
+const today = dayKey(now.toISOString());
+const fmtDay = iso => { const d = dayKey(iso); return d === today ? 'Tonight' : new Date(iso).toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London'}); };
+const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London'}) : '';
+const GIGS = SR.gigs.filter(g => dayKey(g.start) >= today).sort((a, b) => a.start.localeCompare(b.start));
+const gigById = Object.fromEntries(SR.gigs.map(g => [g.id, g]));
+
+/* ---------------- your data (stays on this phone) ---------------- */
+const KEY = 'smallrooms.v1';
+let S = {likes: {}, going: {}, plays: {}, home: null, ring: 1, mode: 'full', lastVisit: null, prevVisit: null, seenWelcome: false};
+try { Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+// Starter likes come from a private link (#likes=key,key,...): the part after # never leaves the phone,
+// so the public site doesn't carry anyone's taste. A local build may also bundle them in data.js.
+const seedFromHash = (location.hash.match(/likes=([^&]+)/) || [])[1];
+if (seedFromHash) {
+  decodeURIComponent(seedFromHash).split(',').forEach(k => { if (A[k] && !S.likes[k]) S.likes[k] = Date.now(); });
+  S.seeded = true;
+  history.replaceState(null, '', location.pathname);
+} else if (!S.seeded && (SR.starterLikes || []).length) {
+  SR.starterLikes.forEach(k => { if (A[k]) S.likes[k] = Date.now(); });
+  S.seeded = true;
+}
+// "new since you were last here": remember the previous visit, then stamp this one
+// a "visit" only rolls over after an hour away, so reloading doesn't wipe the NEW badges
+if (!S.lastVisit) { S.prevVisit = new Date(Date.now() - 7 * 864e5).toISOString(); S.lastVisit = now.toISOString(); }
+else if (now - new Date(S.lastVisit) > 3600e3) { S.prevVisit = S.lastVisit; S.lastVisit = now.toISOString(); }
+save();
+setInterval(() => { S.lastVisit = new Date().toISOString(); save(); }, 5 * 60e3);   // keep "last here" current while open
+
+const liked = k => !!S.likes[k];
+const playable = k => A[k] && A[k].songs && A[k].songs.length;
+const isNew = g => g.seen && g.seen > S.prevVisit;
+
+/* ---------------- geography: start at one venue, widen by distance ---------------- */
+const hav = (a, b) => { const R = 6371, r = x => x * Math.PI / 180; const dLa = r(b.lat - a.lat), dLo = r(b.lng - a.lng);
+  return 2 * R * Math.asin(Math.sqrt(Math.sin(dLa / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLo / 2) ** 2)); };
+const byDistance = from => SR.venues.map(v => ({v, d: hav(from, v)})).sort((a, b) => a.d - b.d);
+function circle() {
+  if (!S.home || !V[S.home]) return [];
+  return byDistance(V[S.home]).slice(0, Math.max(1, Math.min(SR.venues.length, S.ring))).map(x => x.v.key);
+}
+// the circle grows as you engage: every 3 likes or 12 acts listened to opens the next-nearest venue
+// only what you do after picking a start venue counts (starter likes don't open venues by themselves)
+const engagement = () => Math.max(0, Object.keys(S.likes).length - (S.base?.likes || 0))
+  + Math.floor(Math.max(0, Object.keys(S.plays).length - (S.base?.plays || 0)) / 4);
+const setHome = key => { S.home = key; S.ring = 1; S.base = {likes: Object.keys(S.likes).length, plays: Object.keys(S.plays).length}; save(); };
+const earnedRing = () => 1 + Math.floor(engagement() / 3);
+function maybeGrow() {
+  const r = Math.min(SR.venues.length, earnedRing());
+  if (S.home && r > S.ring) {
+    S.ring = r; save();
+    const added = circle()[S.ring - 1];
+    if (added) toast(`Opened up ${V[added].name} in your discovery queue`);
+  }
+}
+
+/* ---------------- taste: similar sounds to what you like ---------------- */
+function tasteScores() {
+  const L = Object.keys(S.likes).filter(k => A[k]);
+  const sc = {};
+  const tagCount = {};
+  L.forEach(k => { if (A[k].tag) tagCount[A[k].tag] = (tagCount[A[k].tag] || 0) + 1; });
+  for (const [k, a] of Object.entries(A)) {
+    if (!playable(k)) continue;
+    let s = 0;
+    for (const l of L) {
+      const fwd = (A[l].similar || []).find(x => x[0] === k);
+      const back = (a.similar || []).find(x => x[0] === l);
+      s += Math.max(fwd ? fwd[1] : 0, back ? back[1] : 0);
+    }
+    if (a.tag && tagCount[a.tag]) s += 0.25 * tagCount[a.tag] / Math.max(1, L.length) * 3;
+    s += 0.06 * (a.score || 0);           // gentle prior: closeness to Radiohead / Tame Impala / Pinegrove
+    sc[k] = s;
+  }
+  return sc;
+}
+const READY = 3;   // likes needed before band recommendations appear
+function recommendedActs(n) {
+  const sc = tasteScores();
+  return Object.entries(sc).filter(([k]) => !liked(k) && A[k].gigs.some(id => gigById[id] && dayKey(gigById[id].start) >= today))
+    .sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, s]) => ({k, s}));
+}
+function gigScore(g, sc) {
+  let s = 0;
+  g.acts.forEach(a => { s += liked(a.k) ? 3 : (sc[a.k] || 0); });
+  if (circle().includes(g.venue)) s += 0.3;
+  return s;
+}
+function promoterScores(sc) {
+  const out = {};
+  GIGS.forEach(g => { if (g.promoter === 'In-house') return;
+    const p = out[g.promoter] ||= {name: g.promoter, s: 0, gigs: [], liked: new Set()};
+    p.gigs.push(g);
+    g.acts.forEach(a => { p.s += liked(a.k) ? 2 : (sc[a.k] || 0) * 0.6; if (liked(a.k)) p.liked.add(A[a.k]?.name || a.n); });
+  });
+  return Object.values(out).sort((a, b) => b.s - a.s);
+}
+
+/* ---------------- player: YouTube full songs, or 30s previews (keep playing when locked) ---------------- */
+const audio = $('#audio');
+let Q = [], qi = -1, ytPlayer = null, ytReady = false, pendingYT = null, tick = null;
+function songFor(k, idx) {
+  const songs = (A[k] && A[k].songs) || [];
+  if (idx != null) return songs[idx];
+  return S.mode === 'full' ? (songs.find(s => s.youtube) || songs[0]) : (songs.find(s => s.preview) || songs[0]);
+}
+function setQueue(items, start = 0, label = '') {
+  Q = items.filter(it => playable(it.k)); Q.label = label;
+  if (!Q.length) { toast('No verified recordings here yet'); return; }
+  playAt(Math.min(start, Q.length - 1));
+}
+function playAt(i) {
+  qi = i; const it = Q[qi]; if (!it) return;
+  const a = A[it.k], s = songFor(it.k, it.song);
+  S.plays[it.k] = (S.plays[it.k] || 0) + 1; save(); maybeGrow();
+  const g = it.gig && gigById[it.gig];
+  $('#dock').hidden = false;
+  $('#npWho').textContent = a.name;
+  $('#npWhat').textContent = s.title + (g ? ` · ${fmtDay(g.start)}, ${V[g.venue].name}` : '');
+  $('#npArt').src = s.artwork || ''; $('#npArt').style.visibility = s.artwork ? 'visible' : 'hidden';
+  $('#npHeart').classList.toggle('on', liked(it.k)); $('#npHeart').textContent = liked(it.k) ? '♥' : '♡';
+  const useYT = s.youtube && (S.mode === 'full' || !s.preview);   // YouTube-only songs play either way
+  const amEmbed = !useYT && S.mode === 'full' && s.apple_url && s.apple_id
+    ? s.apple_url.replace('https://music.apple.com', 'https://embed.music.apple.com') + '?i=' + s.apple_id + '&theme=dark' : null;
+  $('#npSrc').innerHTML = esc((useYT ? 'Full song · YouTube' : amEmbed ? 'Apple Music player' : s.preview ? '30s preview · ' + (s.spotify_url ? 'Spotify' : 'Apple Music') : 'No playable clip')
+    + ` · ${qi + 1}/${Q.length}${Q.label ? ' · ' + Q.label : ''}`) + (openLinks(s) ? ' · Save in: ' + openLinks(s) : '');
+  clearInterval(tick);
+  $('#am').hidden = !amEmbed;
+  if (!amEmbed && $('#amframe').src) $('#amframe').removeAttribute('src');
+  if (useYT) {
+    audio.pause(); $('#yt').hidden = false; loadYT(s.youtube);
+  } else if (amEmbed) {
+    // Apple's own player: full song for signed-in subscribers. It can't be controlled from here,
+    // so it waits for a tap and the queue moves on when you press ⏭.
+    audio.pause(); $('#yt').hidden = true; if (ytPlayer && ytReady) ytPlayer.stopVideo();
+    $('#amframe').src = amEmbed;
+  } else {
+    $('#yt').hidden = true; if (ytPlayer && ytReady) ytPlayer.stopVideo();
+    if (s.preview) { audio.src = s.preview; audio.play().catch(() => {}); }
+    else return next();
+  }
+  mediaSession(a, s);
+  syncDock(); renderPlaying();
+  tick = setInterval(progress, 500);
+}
+function next() { if (qi + 1 < Q.length) playAt(qi + 1); else { pause(); toast('End of the queue'); } }
+function prev() { if (qi > 0) playAt(qi - 1); }
+function isPlaying() { if (!$('#am').hidden) return false; return ($('#yt').hidden ? !audio.paused : ytReady && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1); }
+function pause() { audio.pause(); if (ytPlayer && ytReady) ytPlayer.pauseVideo(); syncDock(); }
+function resume() { if (!$('#am').hidden) return toast('Use the play button in Apple’s player'); if ($('#yt').hidden) audio.play().catch(() => {}); else if (ytReady) ytPlayer.playVideo(); syncDock(); }
+function syncDock() {
+  $('#npPlay').textContent = isPlaying() ? '❚❚' : '▶';
+  document.documentElement.style.setProperty('--dockh', $('#dock').hidden ? '0px' : $('#dock').offsetHeight + 'px');
+}
+function progress() {
+  let f = 0;
+  if ($('#yt').hidden) f = audio.duration ? audio.currentTime / audio.duration : 0;
+  else if (ytReady && ytPlayer.getDuration) f = ytPlayer.getCurrentTime() / (ytPlayer.getDuration() || 1);
+  $('#npBar').style.width = (f * 100).toFixed(1) + '%'; syncDock();
+}
+audio.addEventListener('ended', next);
+audio.addEventListener('play', syncDock); audio.addEventListener('pause', syncDock);
+// The YouTube player is created as soon as the app opens, so a tap on ▶ can start a video straight away:
+// iPhones only allow sound when playback starts inside the tap itself.
+let ytStartCheck = null;
+function loadYT(id) {
+  if (!ytReady) { pendingYT = id; return; }
+  ytPlayer.loadVideoById(id);
+  clearTimeout(ytStartCheck);
+  ytStartCheck = setTimeout(() => {   // still not playing after 4s: the phone blocked it, so ask for one tap
+    if (!$('#yt').hidden && ytPlayer.getPlayerState() !== 1 && ytPlayer.getPlayerState() !== 3) {
+      toast('Tap ▶ to start the song'); syncDock();
+    }
+  }, 4000);
+}
+window.onYouTubeIframeAPIReady = () => {
+  ytPlayer = new YT.Player('ytplayer', {width: '100%', height: '100%',
+    playerVars: {playsinline: 1, rel: 0, modestbranding: 1},
+    events: {onReady: () => { ytReady = true; if (pendingYT) { loadYT(pendingYT); pendingYT = null; } syncDock(); },
+             onStateChange: e => { if (e.data === 0) next(); syncDock(); },
+             onError: () => { toast('That video won’t play here, playing the preview instead'); fallbackToPreview(); }}});
+};
+(() => { const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s); })();
+function fallbackToPreview() {
+  const it = Q[qi]; if (!it) return;
+  const s = songFor(it.k, it.song);
+  $('#yt').hidden = true; if (ytReady) ytPlayer.stopVideo();
+  if (s && s.preview) { audio.src = s.preview; audio.play().catch(() => {}); $('#npSrc').textContent = '30s preview (video unavailable)'; }
+  else next();
+}
+function mediaSession(a, s) {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({title: s.title, artist: a.name, album: 'Small Rooms',
+    artwork: s.artwork ? [{src: s.artwork, sizes: '300x300', type: 'image/jpeg'}] : []});
+  navigator.mediaSession.setActionHandler('nexttrack', next);
+  navigator.mediaSession.setActionHandler('previoustrack', prev);
+  navigator.mediaSession.setActionHandler('play', resume);
+  navigator.mediaSession.setActionHandler('pause', pause);
+}
+$('#npPlay').onclick = () => isPlaying() ? pause() : resume();
+$('#npNext').onclick = next; $('#npPrev').onclick = prev;
+$('#npHeart').onclick = () => { const it = Q[qi]; if (it) toggleLike(it.k); };
+
+/* ---------------- actions ---------------- */
+function toggleLike(k) {
+  if (S.likes[k]) delete S.likes[k]; else S.likes[k] = Date.now();
+  save(); maybeGrow();
+  const n = Object.keys(S.likes).length;
+  if (S.likes[k]) toast(n === READY ? 'Nice, recommendations are switched on' : `Liked ${A[k].name}`);
+  render(); if (Q[qi] && Q[qi].k === k) { $('#npHeart').classList.toggle('on', liked(k)); $('#npHeart').textContent = liked(k) ? '♥' : '♡'; }
+}
+function toggleGoing(id) {
+  if (S.going[id]) delete S.going[id]; else S.going[id] = Date.now();
+  save(); toast(S.going[id] ? 'Added to your gigs' : 'Removed from your gigs'); render();
+}
+let toastT;
+function toast(msg) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
+  clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2600);
+}
+const gigQueue = g => g.acts.map(a => ({k: a.k, gig: g.id}));
+const gigsQueue = gs => gs.flatMap(gigQueue);
+// discovery queue: upcoming nights in your circle, date order, unheard acts first, taste-ranked within each day
+function discoveryQueue() {
+  const sc = tasteScores(), c = circle();
+  const items = [];
+  GIGS.filter(g => c.includes(g.venue)).forEach(g => g.acts.forEach(a => items.push({k: a.k, gig: g.id, day: dayKey(g.start)})));
+  const seen = new Set();
+  return items.filter(it => playable(it.k) && !seen.has(it.k) && seen.add(it.k))
+    .sort((a, b) => a.day.localeCompare(b.day) || ((S.plays[a.k] ? 1 : 0) - (S.plays[b.k] ? 1 : 0)) || (sc[b.k] || 0) - (sc[a.k] || 0));
+}
+
+/* ---------------- views ---------------- */
+let route = {tab: 'discover'};
+const go = r => { route = r; render(); window.scrollTo(0, 0); };
+document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => go({tab: b.dataset.tab}));
+
+function gigCard(g, opts = {}) {
+  const v = V[g.venue], sc = opts.sc || {};
+  const rows = g.acts.map((a, i) => {
+    const act = A[a.k], m = playable(a.k), song = m ? songFor(a.k) : null;
+    const rec = !liked(a.k) && (sc[a.k] || 0) >= 0.9;
+    return `<li class="${m ? '' : 'nomusic'} ${rec ? 'rec' : ''}" data-q="${g.id}" data-i="${i}">
+      <span class="t">${a.t ? fmtTime(a.t) : i === g.acts.length - 1 ? 'head' : (i + 1) + '.'}</span>
+      <span class="n"><b>${esc(act ? act.name : a.n)}</b><i>${m ? esc(song.title) + (act.tag ? ' · ' + esc(act.tag) : '') : 'no verified recording'}</i></span>
+      ${act ? `<button class="heart ${liked(a.k) ? 'on' : ''}" data-like="${a.k}" aria-label="Like ${esc(act.name)}">${liked(a.k) ? '♥' : '♡'}</button>` : '<span></span>'}
+      ${m ? `<button class="play" data-play="${g.id}" data-i="${i}" aria-label="Play ${esc(act.name)}">▶</button>` : '<span></span>'}
+    </li>`;
+  }).join('');
+  const price = g.price ? `£${(g.price / 100).toFixed(g.price % 100 ? 2 : 0)}` : g.price === 0 ? 'Free' : '';
+  return `<article class="gig">
+    <div class="meta"><span class="v">${esc(fmtDay(g.start))}</span><span>${fmtTime(g.start)}</span>
+      ${opts.hideVenue ? '' : `<button data-venue="${g.venue}" class="muted" style="text-decoration:underline">${esc(v.name)}</button>`}
+      ${g.promoter !== 'In-house' ? `<button data-promoter="${esc(g.promoter)}" class="faint">${esc(g.promoter)}</button>` : ''}
+      ${isNew(g) ? '<span class="badge new">new</span>' : ''}${S.going[g.id] ? '<span class="badge going">going</span>' : ''}
+      ${opts.why ? `<span class="badge you">${esc(opts.why)}</span>` : ''}</div>
+    <h3>${esc(g.title)}</h3><ol class="acts">${rows}</ol>
+    <div class="foot">
+      <button class="btn primary" data-playgig="${g.id}">▶ Play the night</button>
+      <button class="btn ghost ${S.going[g.id] ? 'going-on' : ''}" data-going="${g.id}">${S.going[g.id] ? '★ Going' : '☆ I want to go'}</button>
+      <a class="btn ghost" href="${esc(g.url)}" target="_blank" rel="noopener">Tickets${price ? ' · ' + price : ''}</a>
+    </div>
+    ${g.order === 'set times' ? '' : '<div class="faint" style="font-size:11.5px;margin-top:6px">Running order estimated from the billing (opener first)</div>'}
+  </article>`;
+}
+// "Open in" links so a song can be saved in your own music app
+function openLinks(s) {
+  const l = [];
+  if (s.apple_url) l.push(`<a href="${esc(s.apple_url)}" target="_blank" rel="noopener">Apple Music</a>`);
+  if (s.spotify_url) l.push(`<a href="${esc(s.spotify_url)}" target="_blank" rel="noopener">Spotify</a>`);
+  if (s.youtube) l.push(`<a href="https://music.youtube.com/watch?v=${esc(s.youtube)}" target="_blank" rel="noopener">YouTube Music</a>`);
+  return l.join(' · ');
+}
+function header(title, sub, back) {
+  return `<header class="top">${back ? '<button class="back" data-back aria-label="Back">‹</button>' : ''}<h1>${esc(title)}</h1><div class="sub">${sub || ''}</div></header>`;
+}
+
+function viewDiscover() {
+  const sc = tasteScores();
+  let h = header('Small Rooms', `${SR.venues.length} London venues<br>${GIGS.length} nights ahead`);
+  if (!S.home) {
+    h += `<div class="callout" style="margin-top:16px"><h2 style="margin-top:0">Start with one venue</h2>
+      <p class="muted" style="margin:0">Pick a room near you. Your discovery queue starts there and opens up the next-nearest venues as you listen and like things.</p>
+      <div class="row" style="margin-top:12px"><button class="btn you" id="locate">📍 Use my location</button></div>
+      <div class="venuepick" id="pick">${SR.venues.map(v => `<button data-home="${v.key}"><span><b>${esc(v.name)}</b><br><small>${esc(v.area)}</small></span><small>${GIGS.filter(g => g.venue === v.key).length} nights</small></button>`).join('')}</div></div>`;
+    return h;
+  }
+  const c = circle(), nextV = byDistance(V[S.home])[S.ring];
+  const need = nextV ? 3 - (engagement() % 3) : 0;
+  const newGigs = GIGS.filter(isNew);
+  h += `<div class="callout" style="margin-top:16px">
+    <div class="muted" style="font-size:12.5px">Your discovery queue</div>
+    <h2 style="margin:4px 0 6px">${c.map(k => esc(V[k].name)).join(' · ')}</h2>
+    <div class="row"><button class="btn primary" id="playDiscover">▶ Play discovery</button>
+      <button class="btn ghost" id="changeHome">Change start venue</button></div>
+    ${nextV ? `<div class="faint" style="font-size:12.5px;margin-top:10px">Next to open up: <b class="muted">${esc(nextV.v.name)}</b> (${nextV.d.toFixed(1)} km) after ${need} more like${need > 1 ? 's' : ''} or a few more listens · <button id="growNow" style="text-decoration:underline">add it now</button></div>
+      <div class="progress"><i style="width:${((3 - need) / 3 * 100).toFixed(0)}%"></i></div>` : '<div class="faint" style="font-size:12.5px;margin-top:10px">All venues are in your queue.</div>'}
+  </div>`;
+  if (newGigs.length) {
+    h += `<h2>New since you were last here<small>${newGigs.length} night${newGigs.length > 1 ? 's' : ''} announced since ${new Date(S.prevVisit).toLocaleDateString('en-GB', {day: 'numeric', month: 'short'})}</small></h2>`;
+    h += newGigs.slice(0, 4).map(g => gigCard(g, {sc})).join('');
+    if (newGigs.length > 4) h += `<button class="btn ghost" style="margin-top:10px" data-shownew>See all ${newGigs.length} new nights</button>`;
+  }
+  const nL = Object.keys(S.likes).length;
+  if (nL >= READY) {
+    const recs = recommendedActs(6);
+    h += `<h2>Bands for you<small>Sound closest to the ${nL} acts you've liked</small></h2><div class="list">${recs.map(({k}) => {
+      const a = A[k], g = a.gigs.map(id => gigById[id]).filter(g => g && dayKey(g.start) >= today)[0], s = a.songs[0];
+      return `<div class="item">${s.artwork ? `<img src="${esc(s.artwork)}" alt="">` : `<div class="ph">${esc(a.name[0])}</div>`}
+        <div style="min-width:0"><div class="ttl">${esc(a.name)}</div><div class="sub">${g ? esc(fmtDay(g.start) + ' · ' + V[g.venue].name) : ''}${a.tag ? ' · ' + esc(a.tag) : ''}</div></div>
+        <div class="row"><button class="heart ${liked(k) ? 'on' : ''}" data-like="${k}" aria-label="Like">♡</button><button class="play" data-playact="${k}" aria-label="Play">▶</button></div></div>`;
+    }).join('')}</div>`;
+  } else {
+    h += `<div class="callout blue" style="margin-top:20px"><b>Band recommendations</b><div class="muted" style="font-size:13.5px;margin-top:4px">Like ${READY - nL} more act${READY - nL > 1 ? 's' : ''} and Small Rooms starts suggesting bands from what you like.</div>
+      <div class="progress"><i style="width:${nL / READY * 100}%"></i></div></div>`;
+  }
+  const soon = GIGS.filter(g => c.includes(g.venue)).slice(0, 8);
+  h += `<h2>Coming up near ${esc(V[S.home].name)}</h2>` + soon.map(g => gigCard(g, {sc})).join('');
+  return h;
+}
+
+function viewBrowse() {
+  const sc = tasteScores();
+  if (route.venue) {
+    const v = V[route.venue], gs = GIGS.filter(g => g.venue === v.key);
+    return header(v.name, esc(v.area), true) + `<div class="row" style="margin:14px 0 4px">
+      <button class="btn primary" data-playlist="venue">▶ Play everything here</button><a class="btn ghost" href="${esc(v.website)}" target="_blank" rel="noopener">Venue site</a></div>
+      <p class="faint" style="font-size:12.5px">${gs.length} upcoming nights${v.capacity ? ' · capacity ' + v.capacity : ''}</p>` + gs.map(g => gigCard(g, {sc, hideVenue: true})).join('');
+  }
+  if (route.promoter) {
+    const gs = GIGS.filter(g => g.promoter === route.promoter);
+    return header(route.promoter, 'promoter', true) + `<div class="row" style="margin:14px 0"><button class="btn primary" data-playlist="promoter">▶ Play all their nights</button></div>` + gs.map(g => gigCard(g, {sc})).join('');
+  }
+  if (route.sound) {
+    const gs = GIGS.filter(g => g.acts.some(a => A[a.k] && A[a.k].tag === route.sound));
+    return header(route.sound, 'sound', true) + `<div class="row" style="margin:14px 0"><button class="btn primary" data-playlist="sound">▶ Play ${esc(route.sound)}</button></div>` + gs.map(g => gigCard(g, {sc})).join('');
+  }
+  const mode = route.by || 'venue';
+  let h = header('Browse', '') + `<div class="row" style="margin:14px 0">${['venue', 'promoter', 'sound'].map(m => `<button class="pill ${mode === m ? 'on' : ''}" data-by="${m}">${m === 'venue' ? 'Venues' : m === 'promoter' ? 'Promoters' : 'Sounds'}</button>`).join('')}</div><div class="list">`;
+  if (mode === 'venue') {
+    const ref = S.home ? V[S.home] : null;
+    const vs = ref ? byDistance(ref).map(x => x) : SR.venues.map(v => ({v, d: null}));
+    h += vs.map(({v, d}) => { const n = GIGS.filter(g => g.venue === v.key).length, nn = GIGS.filter(g => g.venue === v.key && isNew(g)).length;
+      return `<button class="item" data-venue="${v.key}" style="text-align:left"><div class="ph">${esc(v.name.replace(/^The /, '')[0])}</div><div style="min-width:0"><div class="ttl">${esc(v.name)}</div><div class="sub">${esc(v.area)}${d != null ? ' · ' + d.toFixed(1) + ' km' : ''} · ${n} nights${nn ? ` · ${nn} new` : ''}</div></div><span class="faint">›</span></button>`; }).join('');
+  } else if (mode === 'promoter') {
+    const ps = promoterScores(sc);
+    h += ps.map(p => `<button class="item" data-promoter="${esc(p.name)}" style="text-align:left"><div class="ph">${esc(p.name[0])}</div><div style="min-width:0"><div class="ttl">${esc(p.name)}</div><div class="sub">${p.gigs.length} night${p.gigs.length > 1 ? 's' : ''} · ${esc([...new Set(p.gigs.map(g => V[g.venue].name))].join(', '))}</div></div><span class="faint">›</span></button>`).join('');
+  } else {
+    const counts = {};
+    Object.values(A).forEach(a => { if (a.tag && a.gigs.some(id => gigById[id] && dayKey(gigById[id].start) >= today)) counts[a.tag] = (counts[a.tag] || 0) + 1; });
+    h += Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<button class="item" data-sound="${esc(t)}" style="text-align:left"><div class="ph">♪</div><div style="min-width:0"><div class="ttl">${esc(t)}</div><div class="sub">${n} acts playing soon</div></div><span class="faint">›</span></button>`).join('');
+  }
+  return h + '</div>';
+}
+
+function viewLiked() {
+  const L = Object.entries(S.likes).filter(([k]) => A[k]).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  let h = header('Liked', `${L.length} acts`);
+  if (!L.length) return h + '<p class="muted" style="margin-top:20px">Tap ♡ on any act while you listen. Your likes build your taste, your playlist and your gig picks.</p>';
+  h += `<div class="row" style="margin:14px 0"><button class="btn primary" id="playLikes">▶ Play your likes + more from them</button></div>`;
+  h += L.map(k => {
+    const a = A[k], ups = a.gigs.map(id => gigById[id]).filter(g => g && dayKey(g.start) >= today);
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><div style="min-width:0"><div style="font:700 17px var(--display)">${esc(a.name)}</div>
+      <div class="muted" style="font-size:12.5px">${ups.length ? '🎟 ' + ups.map(g => esc(fmtDay(g.start) + ', ' + V[g.venue].name)).join(' · ') : 'No London dates in our venues yet'}</div></div>
+      <button class="heart on" data-like="${k}" aria-label="Unlike">♥</button></div>
+      <ol class="acts" style="margin-top:6px">${a.songs.map((s, i) => `<li data-actsong="${k}" data-i="${i}"><span class="t">${i + 1}.</span><span class="n"><b>${esc(s.title)}</b><i>${s.youtube ? 'full song' : 'preview'}${s.released ? ' · ' + s.released.slice(0, 4) : ''} · ${openLinks(s)}</i></span><span></span><button class="play" data-playsong="${k}" data-i="${i}" aria-label="Play ${esc(s.title)}">▶</button></li>`).join('')}</ol>
+      ${ups[0] ? `<div class="row" style="margin-top:8px"><button class="btn ghost" style="padding:8px 12px;font-size:13px" data-going="${ups[0].id}">${S.going[ups[0].id] ? '★ Going ' : '☆ I want to see them '}${esc(fmtDay(ups[0].start))}</button></div>` : ''}
+    </div>`;
+  }).join('');
+  return h;
+}
+
+function viewGigs() {
+  const sc = tasteScores();
+  const going = GIGS.filter(g => S.going[g.id]);
+  let h = header('My gigs', `${going.length} going`);
+  h += `<h2>Going</h2>` + (going.length ? going.map(g => gigCard(g, {sc})).join('') : '<p class="muted">Tap “I want to go” on any night and it lands here.</p>');
+  const recs = GIGS.filter(g => !S.going[g.id]).map(g => ({g, s: gigScore(g, sc)})).filter(x => x.s > 0.9).sort((a, b) => b.s - a.s).slice(0, 8)
+    .sort((a, b) => a.g.start.localeCompare(b.g.start));
+  h += `<h2>Recommended nights<small>Bills with acts you like or that sound close to them</small></h2>` + (recs.length ? recs.map(({g}) => {
+    const l = g.acts.filter(a => liked(a.k)).map(a => A[a.k].name);
+    return gigCard(g, {sc, why: l.length ? 'you like ' + l.join(', ') : 'sounds like your likes'});
+  }).join('') : '<p class="muted">Like a few acts first.</p>');
+  const ps = promoterScores(sc).filter(p => p.s > 0.5).slice(0, 5);
+  h += `<h2>Promoters you might like<small>They book acts you like, or acts that sound close</small></h2><div class="list">` + ps.map(p => `<button class="item" data-promoter="${esc(p.name)}" style="text-align:left"><div class="ph">${esc(p.name[0])}</div><div style="min-width:0"><div class="ttl">${esc(p.name)}</div><div class="sub">${p.liked.size ? 'Booked ' + esc([...p.liked].join(', ')) + ' · ' : ''}${p.gigs.length} night${p.gigs.length > 1 ? 's' : ''} coming up</div></div><span class="faint">›</span></button>`).join('') + '</div>';
+  return h;
+}
+
+function render() {
+  const tab = route.tab;
+  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
+  const newCount = GIGS.filter(isNew).length;
+  const db = document.querySelector('nav.tabs [data-tab="discover"]');
+  db.querySelector('.dot')?.remove(); if (newCount && tab !== 'discover') db.insertAdjacentHTML('beforeend', '<i class="dot"></i>');
+  $('#app').innerHTML = tab === 'discover' ? (route.allNew ? viewAllNew() : viewDiscover()) : tab === 'browse' ? viewBrowse() : tab === 'liked' ? viewLiked() : viewGigs();
+  renderPlaying();
+}
+function viewAllNew() {
+  const sc = tasteScores();
+  return header('New nights', '', true) + GIGS.filter(isNew).map(g => gigCard(g, {sc})).join('');
+}
+function renderPlaying() {
+  document.querySelectorAll('li.playing').forEach(n => n.classList.remove('playing'));
+  const it = Q[qi]; if (!it) return;
+  if (it.gig) { const g = gigById[it.gig]; const i = g.acts.findIndex(a => a.k === it.k); document.querySelectorAll(`li[data-q="${it.gig}"][data-i="${i}"]`).forEach(n => n.classList.add('playing')); }
+  if (it.song != null) document.querySelectorAll(`li[data-actsong="${it.k}"][data-i="${it.song}"]`).forEach(n => n.classList.add('playing'));
+}
+
+/* one click handler for everything */
+document.addEventListener('click', e => {
+  const t = e.target.closest('button,[data-q]'); if (!t) return;
+  const d = t.dataset;
+  if (d.like) return toggleLike(d.like);
+  if (d.going) return toggleGoing(d.going);
+  if (d.play) { const g = gigById[d.play]; return setQueue(gigQueue(g), g.acts.slice(0, +d.i).filter(a => playable(a.k)).length, g.title); }
+  if (d.playgig) { const g = gigById[d.playgig]; return setQueue(gigQueue(g), 0, V[g.venue].name); }
+  if (d.playact) { const a = A[d.playact]; return setQueue(a.songs.map((s, i) => ({k: d.playact, song: i})), 0, a.name); }
+  if (d.playsong) return setQueue(A[d.playsong].songs.map((s, i) => ({k: d.playsong, song: i})), +d.i, A[d.playsong].name);
+  if (d.venue) return go({tab: 'browse', venue: d.venue});
+  if (d.promoter) return go({tab: 'browse', promoter: d.promoter});
+  if (d.sound) return go({tab: 'browse', sound: d.sound});
+  if (d.by) return go({tab: 'browse', by: d.by});
+  if (d.back != null) return go({tab: route.tab, by: route.by});
+  if (d.shownew != null) return go({tab: 'discover', allNew: true});
+  if (d.home) { setHome(d.home); toast(`Starting at ${V[d.home].name}`); return render(); }
+  if (d.playlist) {
+    const gs = d.playlist === 'venue' ? GIGS.filter(g => g.venue === route.venue) : d.playlist === 'promoter' ? GIGS.filter(g => g.promoter === route.promoter) : GIGS.filter(g => g.acts.some(a => A[a.k] && A[a.k].tag === route.sound));
+    const items = d.playlist === 'sound' ? gs.flatMap(g => g.acts.filter(a => A[a.k] && A[a.k].tag === route.sound).map(a => ({k: a.k, gig: g.id}))) : gigsQueue(gs);
+    return setQueue(items, 0, route.venue ? V[route.venue].name : route.promoter || route.sound);
+  }
+  if (t.id === 'playDiscover') return setQueue(discoveryQueue(), 0, 'discovery');
+  if (t.id === 'changeHome') { S.home = null; save(); return render(); }
+  if (t.id === 'growNow') { S.ring = Math.min(SR.venues.length, S.ring + 1); save(); return render(); }
+  if (t.id === 'playLikes') {
+    const L = Object.entries(S.likes).filter(([k]) => playable(k)).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    const items = []; for (let i = 0; i < 5; i++) L.forEach(k => { if (A[k].songs[i]) items.push({k, song: i}); });
+    return setQueue(items, 0, 'your likes');
+  }
+  if (t.id === 'locate') {
+    if (!navigator.geolocation) return toast('Location isn’t available here, pick a venue instead');
+    navigator.geolocation.getCurrentPosition(p => {
+      const near = byDistance({lat: p.coords.latitude, lng: p.coords.longitude})[0];
+      setHome(near.v.key); toast(`Nearest: ${near.v.name} (${near.d.toFixed(1)} km)`); render();
+    }, () => toast('Couldn’t get your location, pick a venue instead'), {timeout: 8000});
+  }
+});
+// Full songs (YouTube, screen on) vs Previews (30s clips that keep playing when the phone is locked)
+function syncMode() {
+  document.querySelectorAll('#modeSwitch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === S.mode)));
+}
+document.querySelectorAll('#modeSwitch button').forEach(b => b.onclick = () => {
+  S.mode = b.dataset.mode; save(); syncMode();
+  toast(S.mode === 'full' ? 'Full songs where there’s a verified video' : 'Previews: keeps playing with your phone locked');
+  if (Q[qi]) playAt(qi);
+});
+syncMode();
+window.addEventListener('resize', syncDock);
+render();
+})();
+</script>
+</body>
+</html>

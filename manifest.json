@@ -1,0 +1,10 @@
+{
+  "name": "Small Rooms",
+  "short_name": "Small Rooms",
+  "description": "London's local-band gigs, playable",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#141019",
+  "theme_color": "#141019",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}
