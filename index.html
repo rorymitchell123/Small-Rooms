@@ -43,6 +43,8 @@ h2 small{display:block;font:400 12.5px var(--body);color:var(--muted);margin-top
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .scroller{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:2px 16px}
 .scroller::-webkit-scrollbar{display:none}
+.scroller .pill{white-space:nowrap;flex:none}
+#dock.live .mode,#dock.live #lockNote{display:none}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:11px 16px;font-weight:600;font-size:14.5px}
 .btn.primary{background:var(--lamp);color:#1b1206}
 .btn.ghost{border:1px solid var(--line);color:var(--text)}
@@ -111,7 +113,16 @@ ol.acts li.rec b{color:var(--you)}
 .bar i{display:block;height:100%;width:0;background:var(--live)}
 
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--ink);border-top:1px solid var(--ink-3);padding-bottom:env(safe-area-inset-bottom)}
-nav.tabs .inner{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);height:var(--tabh)}
+nav.tabs .inner{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);height:var(--tabh)}
+.live-grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media (min-width:520px){.live-grid{grid-template-columns:1fr 1fr}}
+.lv{display:flex;flex-direction:column;gap:8px;min-width:0}
+.lv .thumb{position:relative;display:block;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--ink-3)}
+.lv .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.lv .len{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.75);color:#fff;font:500 11px var(--mono);padding:2px 5px;border-radius:4px}
+.lv.playing .thumb{outline:3px solid var(--live);outline-offset:-3px}
+.lv .ttl{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv .sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 nav.tabs button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;color:var(--faint)}
 nav.tabs button span{font-size:19px;line-height:1}
 nav.tabs button[aria-current="page"]{color:var(--lamp)}
@@ -138,10 +149,11 @@ nav.tabs button .dot{position:absolute;margin:-18px 0 0 22px;width:8px;height:8p
   </div>
   <div class="bar"><i id="npBar"></i></div>
   <div class="mode" id="modeSwitch" role="group" aria-label="Playback"><button data-mode="full">Full songs · YouTube / Apple Music</button><button data-mode="preview">Previews · plays on, works locked</button></div>
-  <div class="faint" style="font-size:11.5px;margin-top:6px">Locking your phone switches to previews so the music keeps going. <a id="ytQueue" hidden target="_blank" rel="noopener" style="color:var(--muted)"></a></div>
+  <div class="faint" id="lockNote" style="font-size:11.5px;margin-top:6px">Locking your phone switches to previews so the music keeps going. <a id="ytQueue" hidden target="_blank" rel="noopener" style="color:var(--muted)"></a></div>
 </div></div>
 <nav class="tabs" aria-label="Sections"><div class="inner">
   <button data-tab="discover"><span>◉</span>Discover</button>
+  <button data-tab="live"><span>▶</span>Live</button>
   <button data-tab="browse"><span>▦</span>Browse</button>
   <button data-tab="liked"><span>♥</span>Liked</button>
   <button data-tab="gigs"><span>★</span>My gigs</button>
@@ -187,7 +199,10 @@ else if (now - new Date(S.lastVisit) > 3600e3) { S.prevVisit = S.lastVisit; S.la
 save();
 setInterval(() => { S.lastVisit = new Date().toISOString(); save(); }, 5 * 60e3);   // keep "last here" current while open
 
+S.follow = S.follow || {};   // bands you want to see live (follows the band, not one gig)
 const liked = k => !!S.likes[k];
+const following = k => !!S.follow[k];
+const nextGigOf = k => GIGS.find(g => g.acts.some(a => a.k === k));
 const playable = k => A[k] && A[k].songs && A[k].songs.length;
 const isNew = g => g.seen && g.seen > S.prevVisit;
 
@@ -269,12 +284,14 @@ function songFor(k, idx) {
   return mode() === 'full' ? (songs.find(s => s.youtube) || songs[0]) : (songs.find(s => s.preview) || songs[0]);
 }
 function setQueue(items, start = 0, label = '') {
-  Q = items.filter(it => playable(it.k)); Q.label = label;
+  Q = items.filter(it => it.live != null || playable(it.k)); Q.label = label;
   if (!Q.length) { toast('No verified recordings here yet'); return; }
   playAt(Math.min(start, Q.length - 1));
 }
 function playAt(i) {
   qi = i; const it = Q[qi]; if (!it) return;
+  $('#dock').classList.toggle('live', it.live != null);
+  if (it.live != null) return playLive(it);
   const a = A[it.k], s = songFor(it.k, it.song);
   S.plays[it.k] = (S.plays[it.k] || 0) + 1; save(); maybeGrow();
   const g = it.gig && gigById[it.gig];
@@ -308,10 +325,29 @@ function playAt(i) {
   syncDock(); renderPlaying(); updateYTLink();
   tick = setInterval(progress, 500);
 }
+// live sets: always YouTube (they only exist there), so they pause when the phone locks
+function playLive(it) {
+  const v = window.SR_LIVE[it.live];
+  const a = v.a && A[v.a];
+  $('#dock').hidden = false;
+  $('#npWho').textContent = v.b || 'Live set';
+  $('#npWhat').textContent = `Live${v.vn ? ' at ' + v.vn : ''}${v.c ? ' · filmed by ' + v.c : ''}`;
+  $('#npArt').src = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`; $('#npArt').style.visibility = 'visible';
+  $('#npHeart').classList.toggle('on', !!(a && liked(v.a))); $('#npHeart').textContent = a && liked(v.a) ? '♥' : '♡';
+  $('#npSrc').innerHTML = esc(`Live set · YouTube · ${qi + 1}/${Q.length}${Q.label ? ' · ' + Q.label : ''}`) +
+    ` · <a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener">Open in YouTube</a>`;
+  clearInterval(tick); audio.pause(); $('#am').hidden = true;
+  if (away) { toast('Live videos stop when your phone is locked'); return; }
+  $('#yt').hidden = false; loadYT(v.id);
+  if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({title: `${v.b || ''} live${v.vn ? ' at ' + v.vn : ''}`, artist: v.b || '', album: 'Small Rooms · Live'});
+  syncDock(); renderPlaying(); updateYTLink();
+  tick = setInterval(progress, 500);
+}
 // "Open in YouTube": the rest of the queue as a temporary playlist in the YouTube app
 // (YouTube's app keeps playing with the screen locked for YouTube Premium members).
 function updateYTLink() {
-  const ids = [...new Set(Q.slice(Math.max(qi, 0)).map(it => (songFor(it.k, it.song) || {}).youtube || ((A[it.k].songs || []).find(s => s.youtube) || {}).youtube).filter(Boolean))].slice(0, 50);
+  const ids = [...new Set(Q.slice(Math.max(qi, 0)).map(it => it.live != null ? window.SR_LIVE[it.live].id :
+    (songFor(it.k, it.song) || {}).youtube || ((A[it.k].songs || []).find(s => s.youtube) || {}).youtube).filter(Boolean))].slice(0, 50);
   const l = $('#ytQueue');
   l.hidden = ids.length < 1;
   l.href = 'https://www.youtube.com/watch_videos?video_ids=' + ids.join(',');
@@ -397,7 +433,11 @@ function mediaSession(a, s) {
 }
 $('#npPlay').onclick = () => isPlaying() ? pause() : resume();
 $('#npNext').onclick = next; $('#npPrev').onclick = prev;
-$('#npHeart').onclick = () => { const it = Q[qi]; if (it) toggleLike(it.k); };
+$('#npHeart').onclick = () => {
+  const it = Q[qi]; if (!it) return;
+  const k = it.live != null ? window.SR_LIVE[it.live].a : it.k;
+  if (k && A[k]) toggleLike(k); else toast('This band isn’t on the current bills, so it can’t be liked yet');
+};
 
 /* ---------------- actions ---------------- */
 function toggleLike(k) {
@@ -564,7 +604,9 @@ function viewLiked() {
       <div class="muted" style="font-size:12.5px">${ups.length ? '🎟 ' + ups.map(g => esc(fmtDay(g.start) + ', ' + V[g.venue].name)).join(' · ') : 'No London dates in our venues yet'}</div></div>
       <button class="heart on" data-like="${k}" aria-label="Unlike">♥</button></div>
       <ol class="acts" style="margin-top:6px">${a.songs.map((s, i) => `<li data-actsong="${k}" data-i="${i}"><span class="t">${i + 1}.</span><span class="n"><b>${esc(s.title)}</b><i>${s.youtube ? 'full song' : 'preview'}${s.released ? ' · ' + s.released.slice(0, 4) : ''} · ${openLinks(s)}</i></span><span></span><button class="play" data-playsong="${k}" data-i="${i}" aria-label="Play ${esc(s.title)}">▶</button></li>`).join('')}</ol>
-      ${ups[0] ? `<div class="row" style="margin-top:8px"><button class="btn ghost" style="padding:8px 12px;font-size:13px" data-going="${ups[0].id}">${S.going[ups[0].id] ? '★ Going ' : '☆ I want to see them '}${esc(fmtDay(ups[0].start))}</button></div>` : ''}
+      <div class="row" style="margin-top:8px">
+      ${ups[0] ? `<button class="btn ghost" style="padding:8px 12px;font-size:13px" data-going="${ups[0].id}">${S.going[ups[0].id] ? '★ Going ' : '☆ Go '}${esc(fmtDay(ups[0].start))}</button>` : ''}
+      <button class="pill ${following(k) ? 'on' : ''}" data-follow="${k}">${following(k) ? '👀 Want to see live ✓' : '👀 Want to see live'}</button></div>
     </div>`;
   }).join('');
   return h;
@@ -575,6 +617,28 @@ function viewGigs() {
   const going = GIGS.filter(g => S.going[g.id]);
   let h = header('My gigs', `${going.length} going`);
   h += `<h2>Going</h2>` + (going.length ? going.map(g => gigCard(g, {sc})).join('') : '<p class="muted">Tap “I want to go” on any night and it lands here.</p>');
+  // missed them? a liked/followed band's recent gig has passed: here's their next one
+  const nowIso = new Date().toISOString();
+  const missed = [];
+  (SR.past || []).filter(p => p.start < nowIso).sort((a, b) => b.start.localeCompare(a.start)).forEach(p => p.acts.forEach(k => {
+    if (!A[k] || !(liked(k) || following(k)) || missed.some(m => m.k === k)) return;
+    missed.push({k, p, next: nextGigOf(k)});
+  }));
+  if (missed.length) {
+    h += `<h2>Missed them? Catch the next one<small>Bands you like whose last show has been and gone</small></h2><div class="list">` + missed.map(({k, p, next}) =>
+      `<div class="item"><div class="ph">${esc(A[k].name[0])}</div><div style="min-width:0"><div class="ttl">${esc(A[k].name)}</div>
+       <div class="sub">Played ${esc(fmtDay(p.start))}, ${esc((V[p.venue] || {}).name || '')}</div>
+       <div class="sub" style="color:${next ? 'var(--lamp)' : 'var(--faint)'}">${next ? '🎟 Next: ' + esc(fmtDay(next.start) + ', ' + V[next.venue].name) : 'No new London date yet'}</div></div>
+       ${next ? `<button class="btn ghost" style="padding:8px 10px;font-size:12.5px" data-going="${next.id}">${S.going[next.id] ? '★ Going' : '☆ Go'}</button>` : '<span></span>'}</div>`).join('') + '</div>';
+  }
+  // bands you want to see live: follows the band, whichever gig comes next
+  const fol = Object.keys(S.follow).filter(k => A[k]);
+  h += `<h2>Bands you want to see live<small>Tap 👀 on a band in Live or Liked</small></h2>`;
+  h += fol.length ? '<div class="list">' + fol.map(k => { const g = nextGigOf(k);
+    return `<div class="item"><div class="ph">${esc(A[k].name[0])}</div><div style="min-width:0"><div class="ttl">${esc(A[k].name)}</div>
+      <div class="sub" style="color:${g ? 'var(--lamp)' : 'var(--faint)'}">${g ? '🎟 ' + esc(fmtDay(g.start) + ', ' + V[g.venue].name) : 'No London date yet. It’ll show here when one’s announced'}</div></div>
+      ${g ? `<button class="btn ghost" style="padding:8px 10px;font-size:12.5px" data-going="${g.id}">${S.going[g.id] ? '★ Going' : '☆ Go'}</button>` : `<button class="pill" data-follow="${k}">Unfollow</button>`}</div>`; }).join('') + '</div>'
+    : '<p class="muted">None yet.</p>';
   const recs = GIGS.filter(g => !S.going[g.id]).map(g => ({g, s: gigScore(g, sc)})).filter(x => x.s > 0.9).sort((a, b) => b.s - a.s).slice(0, 8)
     .sort((a, b) => a.g.start.localeCompare(b.g.start));
   h += `<h2>Recommended nights<small>Bills with acts you like or that sound close to them</small></h2>` + (recs.length ? recs.map(({g}) => {
@@ -592,8 +656,67 @@ function render() {
   const newCount = GIGS.filter(isNew).length;
   const db = document.querySelector('nav.tabs [data-tab="discover"]');
   db.querySelector('.dot')?.remove(); if (newCount && tab !== 'discover') db.insertAdjacentHTML('beforeend', '<i class="dot"></i>');
-  $('#app').innerHTML = tab === 'discover' ? (route.allNew ? viewAllNew() : viewDiscover()) : tab === 'browse' ? viewBrowse() : tab === 'liked' ? viewLiked() : viewGigs();
+  $('#app').innerHTML = tab === 'discover' ? (route.allNew ? viewAllNew() : viewDiscover()) : tab === 'live' ? viewLive() : tab === 'browse' ? viewBrowse() : tab === 'liked' ? viewLiked() : viewGigs();
   renderPlaying();
+}
+/* ---------------- Live: local bands' live sets on YouTube ---------------- */
+let liveLoading = false;
+function loadLive() {
+  if (window.SR_LIVE || liveLoading) return;
+  liveLoading = true;
+  const s = document.createElement('script'); s.src = 'live.js';
+  s.onload = () => { if (route.tab === 'live') render(); };
+  document.head.appendChild(s);
+}
+const fmtLen = s => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round(s % 3600 / 60)}m` : `${Math.round(s / 60)} min`;
+const fmtAgo = d => d == null ? '' : d < 1 ? 'today' : d < 14 ? `${d}d ago` : d < 60 ? `${Math.round(d / 7)}w ago` : d < 365 ? `${Math.round(d / 30)}mo ago` : `${Math.round(d / 365)}y ago`;
+function liveList() {
+  const L = (window.SR_LIVE || []).map((v, i) => ({...v, i}));
+  const f = route.lf || {};
+  let out = L.filter(v => !f.venue || v.v === f.venue)
+    .filter(v => !f.soon || (v.a && nextGigOf(v.a)))
+    .filter(v => !f.mine || (v.a && (liked(v.a) || following(v.a))));
+  out.sort(f.sort === 'popular' ? (a, b) => b.w - a.w : (a, b) => (a.d ?? 9999) - (b.d ?? 9999));
+  return out;
+}
+function viewLive() {
+  if (!window.SR_LIVE) { loadLive(); return header('Live', '') + '<p class="muted" style="margin-top:20px">Loading live sets…</p>'; }
+  const f = route.lf || {}, all = window.SR_LIVE, list = liveList();
+  const counts = {}; all.forEach(v => { if (v.v) counts[v.v] = (counts[v.v] || 0) + 1; });
+  const venues = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const name = k => (all.find(v => v.v === k) || {}).vn || k;
+  let h = header('Live', `${all.length} sets filmed<br>at London's small rooms`);
+  h += `<div class="scroller" style="margin-top:12px">
+    <button class="pill ${!f.venue ? 'on' : ''}" data-lf="venue" data-val="">All rooms</button>
+    ${venues.map(([k, n]) => `<button class="pill ${f.venue === k ? 'on' : ''}" data-lf="venue" data-val="${esc(k)}">${esc(name(k))} <small class="faint">${n}</small></button>`).join('')}</div>
+    <div class="row" style="margin:10px 0 4px">
+    <button class="pill ${f.soon ? 'you on' : ''}" data-lf="soon">🎟 Playing soon</button>
+    <button class="pill ${f.mine ? 'you on' : ''}" data-lf="mine">♥ Bands I like</button>
+    <button class="pill ${f.sort === 'popular' ? 'on' : ''}" data-lf="sort">${f.sort === 'popular' ? 'Most watched' : 'Newest'}</button></div>
+    <div class="row" style="margin:12px 0"><button class="btn primary" id="playLive" ${list.length ? '' : 'disabled'}>▶ Play these ${list.length} sets</button></div>`;
+  if (!list.length) return h + '<p class="muted">No sets match. Try another room or turn a filter off.</p>';
+  h += '<div class="live-grid">' + list.slice(0, 120).map(v => {
+    const g = v.a && nextGigOf(v.a);
+    return `<article class="lv" data-live="${v.i}">
+      <button class="thumb" data-playlive="${v.i}" aria-label="Play ${esc(v.b || v.t)} live">
+        <img loading="lazy" src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg" alt=""><span class="len">${fmtLen(v.s)}</span></button>
+      <div class="lvmeta"><div class="ttl">${esc(v.b || v.t)}</div>
+        <div class="sub">${v.vn ? esc(v.vn) + ' · ' : ''}${esc(fmtAgo(v.d))}${v.c ? ' · ' + esc(v.c) : ''}</div>
+        ${g ? `<div class="sub" style="color:var(--lamp)">🎟 ${esc(fmtDay(g.start))}, ${esc(V[g.venue].name)}</div>` : ''}
+        ${v.a && A[v.a] ? `<div class="row" style="margin-top:6px;gap:4px">
+          <button class="heart ${liked(v.a) ? 'on' : ''}" data-like="${v.a}" aria-label="Like ${esc(v.b)}">${liked(v.a) ? '♥' : '♡'}</button>
+          <button class="pill ${following(v.a) ? 'on' : ''}" style="padding:4px 10px;font-size:12px" data-follow="${v.a}">${following(v.a) ? '👀 Want to see live ✓' : '👀 Want to see live'}</button></div>` : ''}
+      </div></article>`;
+  }).join('') + '</div>';
+  if (list.length > 120) h += `<p class="faint" style="font-size:12.5px">Showing 120 of ${list.length}. Play the list to hear them all, or pick a room.</p>`;
+  return h;
+}
+function toggleFollow(k) {
+  if (S.follow[k]) delete S.follow[k]; else S.follow[k] = Date.now();
+  save();
+  const g = nextGigOf(k);
+  toast(S.follow[k] ? (g ? `Following ${A[k].name}: next ${fmtDay(g.start)}, ${V[g.venue].name}` : `Following ${A[k].name}. New dates show up in My gigs`) : `Unfollowed ${A[k].name}`);
+  render();
 }
 function viewAllNew() {
   const sc = tasteScores();
@@ -604,6 +727,8 @@ function renderPlaying() {
   const it = Q[qi]; if (!it) return;
   if (it.gig) { const g = gigById[it.gig]; const i = g.acts.findIndex(a => a.k === it.k); document.querySelectorAll(`li[data-q="${it.gig}"][data-i="${i}"]`).forEach(n => n.classList.add('playing')); }
   if (it.song != null) document.querySelectorAll(`li[data-actsong="${it.k}"][data-i="${it.song}"]`).forEach(n => n.classList.add('playing'));
+  document.querySelectorAll('.lv.playing').forEach(n => n.classList.remove('playing'));
+  if (it.live != null) document.querySelectorAll(`.lv[data-live="${it.live}"]`).forEach(n => n.classList.add('playing'));
 }
 
 /* one click handler for everything */
@@ -611,6 +736,16 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button,[data-q]'); if (!t) return;
   const d = t.dataset;
   if (d.like) return toggleLike(d.like);
+  if (d.follow) return toggleFollow(d.follow);
+  if (d.lf) {
+    const f = route.lf = route.lf || {};
+    if (d.lf === 'venue') f.venue = d.val || null;
+    else if (d.lf === 'sort') f.sort = f.sort === 'popular' ? 'newest' : 'popular';
+    else f[d.lf] = !f[d.lf];
+    return render();
+  }
+  if (d.playlive) { const list = liveList(); const start = list.findIndex(v => v.i === +d.playlive);
+    return setQueue(list.map(v => ({live: v.i})), Math.max(0, start), 'live sets'); }
   if (d.going) return toggleGoing(d.going);
   if (d.play) { const g = gigById[d.play]; return setQueue(gigQueue(g), g.acts.slice(0, +d.i).filter(a => playable(a.k)).length, g.title); }
   if (d.playgig) { const g = gigById[d.playgig]; return setQueue(gigQueue(g), 0, V[g.venue].name); }
@@ -629,6 +764,7 @@ document.addEventListener('click', e => {
     return setQueue(items, 0, route.venue ? V[route.venue].name : route.promoter || route.sound);
   }
   if (t.id === 'playDiscover') return setQueue(discoveryQueue(), 0, 'discovery');
+  if (t.id === 'playLive') return setQueue(liveList().map(v => ({live: v.i})), 0, 'live sets');
   if (t.id === 'changeHome') { S.home = null; save(); return render(); }
   if (t.id === 'growNow') { S.ring = Math.min(SR.venues.length, S.ring + 1); save(); return render(); }
   if (t.id === 'playLikes') {
